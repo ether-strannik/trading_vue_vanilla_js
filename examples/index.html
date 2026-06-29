@@ -56,11 +56,15 @@
     });
 
     // 3) The "datafeed". In a real app this is a fetch() of your history endpoint.
-    const bars = generateBars({ count: 300 });
+    const bars = generateBars({ count: 1500 });
 
     // 4) Main pane (paneIndex 0): candlesticks, colored from settings.
     const candles = chart.addSeries(CandlestickSeries, settings.candles, 0);
     candles.setData(bars);
+
+    // Frame the view on the most recent ~400 bars (readable candle width); the rest
+    // of the 1500-bar history is there to scroll/zoom back into.
+    chart.timeScale().setVisibleLogicalRange({ from: bars.length - 400, to: bars.length + 4 });
 
     // 5) Sub-pane (paneIndex 1): a 14-period RSI line, drawn below the price.
     const rsiCfg = settings.rsi || { period: 14, color: '#c49bff' };
