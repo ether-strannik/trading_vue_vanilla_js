@@ -23,12 +23,12 @@
   <div class="wrap">
     <header>
       <h1>trading-vue-vanilla</h1>
-      <span>candlesticks + a 14-period RSI in its own sub-pane &mdash; zero dependencies, no build step</span>
+      <span>MESU26 &middot; 5m &mdash; candlesticks + a 14-period RSI in its own sub-pane &middot; zero dependencies, no build step</span>
     </header>
     <div id="chart"></div>
     <footer>
-      Data is synthesized by <code>feed.js</code> in the engine's preload shape
-      <code>{ time, open, high, low, close, volume }</code>. Colors come from <code>settings.json</code>.
+      Real CQG MESU26 5-minute history from <code>MESU26-5m.json</code> (cache format
+      <code>{ bars: [[time, open, high, low, close, volume], ...] }</code>). Colors come from <code>settings.json</code>.
     </footer>
   </div>
 
@@ -53,28 +53,28 @@
       crosshair: settings.crosshair,
       timeScale: { borderColor: settings.borderColor, timeVisible: true },
       rightPriceScale: { borderColor: settings.borderColor },
-      // allow zooming out far enough to show all 5 days at once (default cap is 500 bars)
-      maxZoom: 1600,
+      // allow zooming out far enough to show the whole dataset at once (default cap is 500 bars)
+      maxZoom: 2500,
     });
 
-    // 3) The "datafeed". In a real app this is a fetch() of your history endpoint.
-    //    5 days of 5-minute bars (288/day) ending at "now", so the latest candle is
-    //    today and the date axis spans the last 5 days for easy comparison.
-    const STEP = 300;                 // 5-minute bars
-    const COUNT = 5 * 24 * 12;        // 5 days x 288 bars/day = 1440
-    const nowSec = Math.floor(Date.now() / 1000);
-    const startTime = nowSec - (COUNT - 1) * STEP;
-    const bars = generateBars({ count: COUNT, step: STEP, startTime });
+    // 3) The "datafeed": real CQG MESU26 5-minute bars. The history file is the cache
+    //    format { bars: [[time, open, high, low, close, volume], ...] } (time = UNIX
+    //    seconds) - we map each row to the engine's bar shape. Falls back to a
+    //    synthesized series if the file can't be fetched (e.g. opened via file://).
+    const bars = await fetch('./MESU26-5m.json')
+      .then((r) => r.json())
+      .then((d) => (d.bars || []).map(([time, open, high, low, close, volume]) =>
+        ({ time, open, high, low, close, volume })))
+      .catch(() => generateBars({ count: 1440, step: 300 }));
 
     // 4) Main pane (paneIndex 0): candlesticks, colored from settings.
     //    Drop volume so no volume bars are drawn (price only).
     const candles = chart.addSeries(CandlestickSeries, settings.candles, 0);
     candles.setData(bars.map(({ volume, ...b }) => b));
 
-    // Show the whole 5-day span (latest candle = now) so the time axis reads as 5
-    // days for comparison. fitContent() only frames the recent ~150 bars, so set the
-    // full logical range explicitly (+6 bars of right margin).
-    chart.timeScale().setVisibleLogicalRange({ from: 0, to: COUNT - 1 + 6 });
+    // Show the whole dataset so the time axis spans the full history; fitContent() only
+    // frames the recent ~150 bars, so set the full logical range explicitly (+6 margin).
+    chart.timeScale().setVisibleLogicalRange({ from: 0, to: bars.length - 1 + 6 });
 
     // 5) Sub-pane (paneIndex 1): a 14-period RSI line, drawn below the price.
     const rsiCfg = settings.rsi || { period: 14, color: '#c49bff' };
