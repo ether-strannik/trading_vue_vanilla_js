@@ -56,17 +56,22 @@
     });
 
     // 3) The "datafeed". In a real app this is a fetch() of your history endpoint.
-    //    step: 300 -> 5-minute bars.
-    const bars = generateBars({ count: 1500, step: 300 });
+    //    5 days of 5-minute bars (288/day) ending at "now", so the latest candle is
+    //    today and the date axis spans the last 5 days for easy comparison.
+    const STEP = 300;                 // 5-minute bars
+    const COUNT = 5 * 24 * 12;        // 5 days x 288 bars/day = 1440
+    const nowSec = Math.floor(Date.now() / 1000);
+    const startTime = nowSec - (COUNT - 1) * STEP;
+    const bars = generateBars({ count: COUNT, step: STEP, startTime });
 
     // 4) Main pane (paneIndex 0): candlesticks, colored from settings.
     //    Drop volume so no volume bars are drawn (price only).
     const candles = chart.addSeries(CandlestickSeries, settings.candles, 0);
     candles.setData(bars.map(({ volume, ...b }) => b));
 
-    // Frame the view on the most recent ~400 bars (readable candle width); the rest
-    // of the 1500-bar history is there to scroll/zoom back into.
-    chart.timeScale().setVisibleLogicalRange({ from: bars.length - 400, to: bars.length + 4 });
+    // Show the whole 5-day span (latest candle = now) so it lines up with a real
+    // 5-day chart for comparison; scroll/zoom to inspect any part.
+    chart.timeScale().fitContent();
 
     // 5) Sub-pane (paneIndex 1): a 14-period RSI line, drawn below the price.
     const rsiCfg = settings.rsi || { period: 14, color: '#c49bff' };
