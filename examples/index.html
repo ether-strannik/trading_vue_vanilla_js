@@ -49,7 +49,7 @@
     // 2) Create the chart, mapping settings -> createChart() options.
     const chart = createChart(document.getElementById('chart'), {
       layout: { background: { color: settings.background }, textColor: settings.textColor },
-      grid: { vertLines: { color: settings.gridColor }, horzLines: { color: settings.gridColor } },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       crosshair: settings.crosshair,
       timeScale: { borderColor: settings.borderColor, timeVisible: true },
       rightPriceScale: { borderColor: settings.borderColor },
