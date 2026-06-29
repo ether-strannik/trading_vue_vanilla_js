@@ -75,9 +75,10 @@
     const candles = chart.addSeries(CandlestickSeries, settings.candles, 0);
     candles.setData(bars.map(({ volume, ...b }) => b));
 
-    // Show the whole dataset so the time axis spans the full history; fitContent() only
-    // frames the recent ~150 bars, so set the full logical range explicitly (+6 margin).
-    chart.timeScale().setVisibleLogicalRange({ from: 0, to: bars.length - 1 + 6 });
+    // Open zoomed in to the most recent ~150 bars (readable 5m candles), right edge at
+    // the last bar; scroll/zoom out to see the rest of the history.
+    const VISIBLE = 150;
+    chart.timeScale().setVisibleLogicalRange({ from: bars.length - VISIBLE, to: bars.length - 1 + 6 });
 
     // 5) Sub-pane (paneIndex 1): a 14-period RSI line, drawn below the price.
     const rsiCfg = settings.rsi || { period: 14, color: '#c49bff' };
