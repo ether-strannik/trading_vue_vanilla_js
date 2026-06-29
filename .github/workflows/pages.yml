@@ -1,0 +1,40 @@
+# Publishes this library + its runnable demo to GitHub Pages.
+#
+# The repo root IS the library, so the whole thing is served as plain static files
+# (no build step). The site root forwards to the demo:
+#
+#   https://ether-strannik.github.io/trading_vue_vanilla_js/           -> redirects
+#   https://ether-strannik.github.io/trading_vue_vanilla_js/examples/  -> candles + RSI
+#
+# One-time setup: repo Settings -> Pages -> Build and deployment -> Source =
+# "GitHub Actions". After that this runs on every push to main.
+name: Deploy to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

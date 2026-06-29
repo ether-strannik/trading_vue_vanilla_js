@@ -1,0 +1,40 @@
+{
+  "name": "trading-vue-vanilla",
+  "version": "0.1.0",
+  "description": "Zero-dependency, framework-free canvas charting engine — the render core of trading-vue-js with a Lightweight-Charts-compatible API. No build step required.",
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./engine.js": "./engine.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "engine.js",
+    "core/",
+    "examples/",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "charts",
+    "candlestick",
+    "trading",
+    "canvas",
+    "financial",
+    "lightweight-charts",
+    "trading-vue-js",
+    "vanilla",
+    "zero-dependency"
+  ],
+  "license": "GPL-3.0-or-later",
+  "author": "ether-strannik",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ether-strannik/trading_vue_vanilla_js"
+  },
+  "homepage": "https://ether-strannik.github.io/trading_vue_vanilla_js/examples/"
+}

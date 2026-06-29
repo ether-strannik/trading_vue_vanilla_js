@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>trading-vue-vanilla — candles + RSI sub-pane</title>
+  <style>
+    :root { --bg: #0e0f13; --panel: #16171d; --tx: #cfd2da; --bd: #2a2c36; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--tx);
+                 font: 13px -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
+    .wrap { display: flex; flex-direction: column; height: 100%; }
+    header { padding: 10px 14px; border-bottom: 1px solid var(--bd); display: flex;
+             align-items: baseline; gap: 12px; }
+    header h1 { font-size: 14px; font-weight: 600; margin: 0; }
+    header span { color: #8a8f9a; font-size: 12px; }
+    #chart { flex: 1; min-height: 0; }
+    footer { padding: 6px 14px; border-top: 1px solid var(--bd); color: #8a8f9a; font-size: 11px; }
+    code { color: #c49bff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>trading-vue-vanilla</h1>
+      <span>candlesticks + a 14-period RSI in its own sub-pane &mdash; zero dependencies, no build step</span>
+    </header>
+    <div id="chart"></div>
+    <footer>
+      Data is synthesized by <code>feed.js</code> in the engine's preload shape
+      <code>{ time, open, high, low, close, volume }</code>. Colors come from <code>settings.json</code>.
+    </footer>
+  </div>
+
+  <script type="module">
+    // Import the library from its public entry (one folder up). Over a static
+    // file server this needs no bundler and no build step.
+    import { createChart, CandlestickSeries, LineSeries } from '../index.js';
+    import { generateBars, computeRSI } from './feed.js';
+
+    // 1) Look-and-feel: fetch the settings file (fall back to sane defaults if it
+    //    can't be loaded, e.g. opened via file:// without a server).
+    const settings = await fetch('./settings.json').then((r) => r.json()).catch(() => ({
+      background: '#0e0f13', textColor: '#9aa0aa', gridColor: '#1a1b22', borderColor: '#2a2c36',
+      candles: { upColor: '#26a69a', downColor: '#ef5350' },
+      rsi: { period: 14, color: '#c49bff', overbought: 70, oversold: 30, guideColor: '#3a3d48' },
+    }));
+
+    // 2) Create the chart, mapping settings -> createChart() options.
+    const chart = createChart(document.getElementById('chart'), {
+      layout: { background: { color: settings.background }, textColor: settings.textColor },
+      grid: { vertLines: { color: settings.gridColor }, horzLines: { color: settings.gridColor } },
+      crosshair: settings.crosshair,
+      timeScale: { borderColor: settings.borderColor, timeVisible: true },
+      rightPriceScale: { borderColor: settings.borderColor },
+    });
+
+    // 3) The "datafeed". In a real app this is a fetch() of your history endpoint.
+    const bars = generateBars({ count: 300 });
+
+    // 4) Main pane (paneIndex 0): candlesticks, colored from settings.
+    const candles = chart.addSeries(CandlestickSeries, settings.candles, 0);
+    candles.setData(bars);
+
+    // 5) Sub-pane (paneIndex 1): a 14-period RSI line, drawn below the price.
+    const rsiCfg = settings.rsi || { period: 14, color: '#c49bff' };
+    const rsi = chart.addSeries(LineSeries, { color: rsiCfg.color, lineWidth: 1.5 }, 1);
+    rsi.setData(computeRSI(bars, rsiCfg.period));
+
+    // overbought / oversold guide lines on the RSI scale
+    if (rsiCfg.overbought) rsi.createPriceLine({ price: rsiCfg.overbought, color: rsiCfg.guideColor, lineStyle: 2 });
+    if (rsiCfg.oversold)   rsi.createPriceLine({ price: rsiCfg.oversold,   color: rsiCfg.guideColor, lineStyle: 2 });
+  </script>
+</body>
+</html>
