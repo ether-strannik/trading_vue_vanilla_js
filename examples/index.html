@@ -61,10 +61,13 @@
     //    format { bars: [[time, open, high, low, close, volume], ...] } (time = UNIX
     //    seconds) - we map each row to the engine's bar shape. Falls back to a
     //    synthesized series if the file can't be fetched (e.g. opened via file://).
+    // Trim the history to last Friday's 16:00 UTC close (2026-06-26 16:00).
+    const CUTOFF = Date.UTC(2026, 5, 26, 16, 0, 0) / 1000;
     const bars = await fetch('./MESU26-5m.json')
       .then((r) => r.json())
-      .then((d) => (d.bars || []).map(([time, open, high, low, close, volume]) =>
-        ({ time, open, high, low, close, volume })))
+      .then((d) => (d.bars || [])
+        .map(([time, open, high, low, close, volume]) => ({ time, open, high, low, close, volume }))
+        .filter((b) => b.time <= CUTOFF))
       .catch(() => generateBars({ count: 1440, step: 300 }));
 
     // 4) Main pane (paneIndex 0): candlesticks, colored from settings.
