@@ -1,20 +1,20 @@
 {
-  "_comment": "General look-and-feel for the demo. The example fetches this and maps it onto createChart() options + the candle series options. Edit and reload to recolor.",
+  "_comment": "Look-and-feel for the demo, modeled on the TradingView 'Green n Black #2' template. The example maps this onto createChart() options + the candle series options. Edit and reload to recolor.",
 
-  "background": "#ffffff",
-  "textColor": "#555555",
-  "gridColor": "#ececec",
-  "borderColor": "#d0d0d0",
+  "background": "#d1d4dc",
+  "textColor": "#50535e",
+  "gridColor": "#d1d4dc",
+  "borderColor": "#b2b5be",
 
-  "crosshair": { "color": "#888888", "labelBg": "#4a4a4a", "labelText": "#ffffff" },
+  "crosshair": { "color": "#6a6d78", "style": 1, "labelBg": "#2a2e39", "labelText": "#ffffff" },
 
   "candles": {
-    "upColor": "#ffffff",
-    "downColor": "#c4c4c4",
-    "wickUpColor": "#5e5e5e",
-    "wickDownColor": "#5e5e5e",
-    "borderUpColor": "#5e5e5e",
-    "borderDownColor": "#5e5e5e"
+    "upColor": "#5b9c7b",
+    "downColor": "#2a2e39",
+    "borderUpColor": "#3a3e48",
+    "borderDownColor": "#3a3e48",
+    "wickUpColor": "#3a3e48",
+    "wickDownColor": "#3a3e48"
   },
 
   "rsi": {
@@ -22,6 +22,6 @@
     "color": "#ff8800",
     "overbought": 70,
     "oversold": 30,
-    "guideColor": "#cfcfcf"
+    "guideColor": "#b2b5be"
   }
 }

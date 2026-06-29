@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>trading-vue-vanilla — candles + RSI sub-pane</title>
   <style>
-    :root { --bg: #ffffff; --panel: #f5f6f8; --tx: #2b2b2b; --bd: #e2e4e8; }
+    :root { --bg: #d1d4dc; --panel: #c7cad3; --tx: #2a2e39; --bd: #b2b5be; }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; background: var(--bg); color: var(--tx);
                  font: 13px -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
@@ -23,7 +23,7 @@
   <div class="wrap">
     <header>
       <h1>trading-vue-vanilla</h1>
-      <span>MESU26 &middot; 5m &mdash; candlesticks + a 14-period RSI in its own sub-pane &middot; zero dependencies, no build step</span>
+      <span>MESU26 &middot; 5m &middot; "Green n Black #2" theme &mdash; candlesticks + a 14-period RSI sub-pane &middot; zero dependencies, no build step</span>
     </header>
     <div id="chart"></div>
     <footer>
@@ -41,16 +41,20 @@
     // 1) Look-and-feel: fetch the settings file (fall back to sane defaults if it
     //    can't be loaded, e.g. opened via file:// without a server).
     const settings = await fetch('./settings.json').then((r) => r.json()).catch(() => ({
-      background: '#ffffff', textColor: '#555555', gridColor: '#ececec', borderColor: '#d0d0d0',
-      candles: { upColor: '#ffffff', downColor: '#c4c4c4', borderUpColor: '#5e5e5e', borderDownColor: '#5e5e5e', wickUpColor: '#5e5e5e', wickDownColor: '#5e5e5e' },
-      rsi: { period: 14, color: '#ff8800', overbought: 70, oversold: 30, guideColor: '#cfcfcf' },
+      background: '#d1d4dc', textColor: '#50535e', gridColor: '#d1d4dc', borderColor: '#b2b5be',
+      crosshair: { color: '#6a6d78', style: 1, labelBg: '#2a2e39', labelText: '#ffffff' },
+      candles: { upColor: '#5b9c7b', downColor: '#2a2e39', borderUpColor: '#3a3e48', borderDownColor: '#3a3e48', wickUpColor: '#3a3e48', wickDownColor: '#3a3e48' },
+      rsi: { period: 14, color: '#ff8800', overbought: 70, oversold: 30, guideColor: '#b2b5be' },
     }));
 
     // 2) Create the chart, mapping settings -> createChart() options.
+    const ch = settings.crosshair || {};
     const chart = createChart(document.getElementById('chart'), {
       layout: { background: { color: settings.background }, textColor: settings.textColor },
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-      crosshair: settings.crosshair,
+      // crosshair: gray, dotted (engine reads the line style off vertLine/horzLine)
+      crosshair: { color: ch.color, labelBg: ch.labelBg, labelText: ch.labelText,
+                   vertLine: { style: ch.style }, horzLine: { style: ch.style } },
       timeScale: { borderColor: settings.borderColor, timeVisible: true },
       rightPriceScale: { borderColor: settings.borderColor },
       // allow zooming out far enough to show the whole dataset at once (default cap is 500 bars)
