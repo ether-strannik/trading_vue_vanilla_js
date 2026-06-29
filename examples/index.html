@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>trading-vue-vanilla — candles + RSI sub-pane</title>
   <style>
-    :root { --bg: #0e0f13; --panel: #16171d; --tx: #cfd2da; --bd: #2a2c36; }
+    :root { --bg: #ffffff; --panel: #f5f6f8; --tx: #2b2b2b; --bd: #e2e4e8; }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; background: var(--bg); color: var(--tx);
                  font: 13px -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
@@ -13,10 +13,10 @@
     header { padding: 10px 14px; border-bottom: 1px solid var(--bd); display: flex;
              align-items: baseline; gap: 12px; }
     header h1 { font-size: 14px; font-weight: 600; margin: 0; }
-    header span { color: #8a8f9a; font-size: 12px; }
+    header span { color: #6b7280; font-size: 12px; }
     #chart { flex: 1; min-height: 0; }
-    footer { padding: 6px 14px; border-top: 1px solid var(--bd); color: #8a8f9a; font-size: 11px; }
-    code { color: #c49bff; }
+    footer { padding: 6px 14px; border-top: 1px solid var(--bd); color: #6b7280; font-size: 11px; }
+    code { color: #7c4dff; }
   </style>
 </head>
 <body>
@@ -41,9 +41,9 @@
     // 1) Look-and-feel: fetch the settings file (fall back to sane defaults if it
     //    can't be loaded, e.g. opened via file:// without a server).
     const settings = await fetch('./settings.json').then((r) => r.json()).catch(() => ({
-      background: '#0e0f13', textColor: '#9aa0aa', gridColor: '#1a1b22', borderColor: '#2a2c36',
-      candles: { upColor: '#26a69a', downColor: '#ef5350' },
-      rsi: { period: 14, color: '#c49bff', overbought: 70, oversold: 30, guideColor: '#3a3d48' },
+      background: '#ffffff', textColor: '#555555', gridColor: '#ececec', borderColor: '#d0d0d0',
+      candles: { upColor: '#ffffff', downColor: '#c4c4c4', borderUpColor: '#5e5e5e', borderDownColor: '#5e5e5e', wickUpColor: '#5e5e5e', wickDownColor: '#5e5e5e' },
+      rsi: { period: 14, color: '#7c4dff', overbought: 70, oversold: 30, guideColor: '#cfcfcf' },
     }));
 
     // 2) Create the chart, mapping settings -> createChart() options.
