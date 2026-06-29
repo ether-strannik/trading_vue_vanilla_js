@@ -19,7 +19,7 @@
 
   "rsi": {
     "period": 14,
-    "color": "#7c4dff",
+    "color": "#ff8800",
     "overbought": 70,
     "oversold": 30,
     "guideColor": "#cfcfcf"

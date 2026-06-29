@@ -43,7 +43,7 @@
     const settings = await fetch('./settings.json').then((r) => r.json()).catch(() => ({
       background: '#ffffff', textColor: '#555555', gridColor: '#ececec', borderColor: '#d0d0d0',
       candles: { upColor: '#ffffff', downColor: '#c4c4c4', borderUpColor: '#5e5e5e', borderDownColor: '#5e5e5e', wickUpColor: '#5e5e5e', wickDownColor: '#5e5e5e' },
-      rsi: { period: 14, color: '#7c4dff', overbought: 70, oversold: 30, guideColor: '#cfcfcf' },
+      rsi: { period: 14, color: '#ff8800', overbought: 70, oversold: 30, guideColor: '#cfcfcf' },
     }));
 
     // 2) Create the chart, mapping settings -> createChart() options.
@@ -56,11 +56,13 @@
     });
 
     // 3) The "datafeed". In a real app this is a fetch() of your history endpoint.
-    const bars = generateBars({ count: 1500 });
+    //    step: 300 -> 5-minute bars.
+    const bars = generateBars({ count: 1500, step: 300 });
 
     // 4) Main pane (paneIndex 0): candlesticks, colored from settings.
+    //    Drop volume so no volume bars are drawn (price only).
     const candles = chart.addSeries(CandlestickSeries, settings.candles, 0);
-    candles.setData(bars);
+    candles.setData(bars.map(({ volume, ...b }) => b));
 
     // Frame the view on the most recent ~400 bars (readable candle width); the rest
     // of the 1500-bar history is there to scroll/zoom back into.
