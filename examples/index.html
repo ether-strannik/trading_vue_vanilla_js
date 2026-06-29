@@ -53,6 +53,8 @@
       crosshair: settings.crosshair,
       timeScale: { borderColor: settings.borderColor, timeVisible: true },
       rightPriceScale: { borderColor: settings.borderColor },
+      // allow zooming out far enough to show all 5 days at once (default cap is 500 bars)
+      maxZoom: 1600,
     });
 
     // 3) The "datafeed". In a real app this is a fetch() of your history endpoint.
@@ -69,9 +71,10 @@
     const candles = chart.addSeries(CandlestickSeries, settings.candles, 0);
     candles.setData(bars.map(({ volume, ...b }) => b));
 
-    // Show the whole 5-day span (latest candle = now) so it lines up with a real
-    // 5-day chart for comparison; scroll/zoom to inspect any part.
-    chart.timeScale().fitContent();
+    // Show the whole 5-day span (latest candle = now) so the time axis reads as 5
+    // days for comparison. fitContent() only frames the recent ~150 bars, so set the
+    // full logical range explicitly (+6 bars of right margin).
+    chart.timeScale().setVisibleLogicalRange({ from: 0, to: COUNT - 1 + 6 });
 
     // 5) Sub-pane (paneIndex 1): a 14-period RSI line, drawn below the price.
     const rsiCfg = settings.rsi || { period: 14, color: '#c49bff' };
