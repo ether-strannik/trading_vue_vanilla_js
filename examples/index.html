@@ -55,7 +55,9 @@
       // crosshair: gray, dotted (engine reads the line style off vertLine/horzLine)
       crosshair: { color: ch.color, labelBg: ch.labelBg, labelText: ch.labelText,
                    vertLine: { style: ch.style }, horzLine: { style: ch.style } },
-      timeScale: { borderColor: settings.borderColor, timeVisible: true },
+      // indexBased: bars are placed by position, so session gaps (the CME daily halt)
+      // collapse instead of leaving whitespace - the engine's signature x-axis behavior.
+      timeScale: { borderColor: settings.borderColor, timeVisible: true, indexBased: true },
       rightPriceScale: { borderColor: settings.borderColor },
       // allow zooming out far enough to show the whole dataset at once (default cap is 500 bars)
       maxZoom: 2500,
