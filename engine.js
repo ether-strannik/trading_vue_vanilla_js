@@ -114,7 +114,14 @@ class Series {
   options() { return this._opts; }
   priceToCoordinate(p) { return this._chart._priceToCoord(this._pane, p); }
   coordinateToPrice(y) { return this._chart._coordToPrice(this._pane, y); }
-  priceFormatter() { return { format: (p) => String(p) }; }
+  priceFormatter() {
+    // honor the series priceFormat: a custom formatter, else round to `precision` decimals
+    // (default 2). Was String(p), which leaked raw floats e.g. 7489.0058 into alert/axis labels.
+    const pf = this._opts.priceFormat || {};
+    if (typeof pf.formatter === 'function') return { format: pf.formatter };
+    const prec = pf.precision != null ? pf.precision : 2;
+    return { format: (p) => Number(p).toFixed(prec) };
+  }
   priceScale() {
     const c = this._chart, k = this._pane;
     return { width: () => c._sbWidth(), applyOptions: (o = {}) => { if (o.mode != null) c._setPaneLog(k, o.mode === 1); if (o.autoScale) c._resetPaneAuto(k); }, options: () => ({ mode: c._paneLogOf(k) ? 1 : 0 }) };
@@ -575,34 +582,70 @@ class Chart {
     }
   }
   _fmt(g, price) { return Number(price).toFixed(g.prec != null ? g.prec : 2); }
-  // primitive priceAxisViews + price-line labels -> tags on a pane's sidebar (drawn after sb.update)
+  // ALL price-axis labels for a pane (last value, price-line tags, primitive views) -> tags on
+  // the sidebar (drawn after sb.update). This is the single label system: the author's last-price
+  // shader is disabled (see paint loop), so every label flows through here and can be decluttered.
   _drawAxisViews(pane) {
     const g = this._gridAt(pane.k); if (!g) return;
-    const ctx = pane.sbCv.getContext('2d'); ctx.font = this._comp.$props.font;
-    const sb = g.sb, h = Const.ChartConfig.PANHEIGHT;   // match the crosshair price panel height (not a squat 16px)
-    const tag = (y, text, fg, bg) => {
-      if (y == null || !isFinite(y)) return;
-      const ty = Math.round(y);
-      ctx.fillStyle = bg || '#363a45'; ctx.fillRect(0, ty - h / 2, sb, h);
-      ctx.fillStyle = fg || '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(text, 6, ty);
-    };
+    const h = Const.ChartConfig.PANHEIGHT;   // match the crosshair price panel height (not a squat 16px)
+    const tags = [];
+    // chip = a small title badge (e.g. "Bid"/"Ask") that pokes OUT of the price scale into the
+    // chart, attached to the label — so the title never steals the price's width inside the box.
+    const add = (y, text, fg, bg, chip) => { if (y == null || !isFinite(y)) return; tags.push({ y, text, fg: fg || '#fff', bg: bg || '#363a45', chip: chip || null }); };
     for (const s of this._series) {
       if (s._pane !== pane.id) continue;
       // last-value label (LWC lastValueVisible): the current price tag on the axis (any candle series)
       if (s._isCandle() && s._rows.length && s._opts.lastValueVisible !== false) {
         const last = s._rows[s._rows.length - 1], price = last[4], st = s._style;
-        tag(g.$2screen(price), this._fmt(g, price), '#fff', s._opts.priceLineColor || (price >= last[1] ? st.colorCandleUp : st.colorCandleDw));
+        add(g.$2screen(price), this._fmt(g, price), '#fff', s._opts.priceLineColor || (price >= last[1] ? st.colorCandleUp : st.colorCandleDw));
       }
       for (const pl of s._priceLines) {
         const o = pl._opts; if (o.axisLabelVisible === false || o.price == null) continue;
-        tag(g.$2screen(o.price), (o.title ? o.title + ' ' : '') + this._fmt(g, o.price), o.axisLabelTextColor || '#fff', o.axisLabelColor || o.color || '#363a45');
+        // the title becomes a side chip; the box shows only the price (full width, readable)
+        add(g.$2screen(o.price), this._fmt(g, o.price), o.axisLabelTextColor || '#fff', o.axisLabelColor || o.color || '#363a45', o.title || null);
       }
       for (const prim of s._primitives) {
         const views = [].concat(prim.priceAxisViews ? prim.priceAxisViews() : [], prim.priceAxisPaneViews ? prim.priceAxisPaneViews() : []);
-        for (const v of views) { if (!v || (v.visible && !v.visible())) continue; tag(v.coordinate ? v.coordinate() : null, v.text ? v.text() : '', v.textColor ? v.textColor() : '#fff', v.backColor ? v.backColor() : '#363a45'); }
+        for (const v of views) { if (!v || (v.visible && !v.visible())) continue; add(v.coordinate ? v.coordinate() : null, v.text ? v.text() : '', v.textColor ? v.textColor() : '#fff', v.backColor ? v.backColor() : '#363a45'); }
       }
     }
+    if (!tags.length) return;
+    // "No overlapping labels": push overlapping label boxes apart so each stays readable. The
+    // price LINES don't move (drawn separately) — only the labels give up exact alignment.
+    if (this._options.noOverlapLabels !== false) this._stackTags(tags, h, g.height);
+    const ctx = pane.sbCv.getContext('2d'); ctx.font = this._comp.$props.font;
+    const gctx = pane.gridCv.getContext('2d'); gctx.font = this._comp.$props.font;
+    const sb = g.sb, left = this._scaleSide === 'left', r = 3;
+    for (const t of tags) {
+      const ty = Math.round(t.y);
+      // price label fills the price-scale box (full width -> stays readable)
+      ctx.fillStyle = t.bg; ctx.fillRect(0, ty - h / 2, sb, h);
+      ctx.fillStyle = t.fg; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(t.text, 6, ty);
+      // title chip: a rounded badge butted against the scale, poking into the chart (on gridCv)
+      if (t.chip) {
+        const cw = Math.ceil(gctx.measureText(t.chip).width) + 12;
+        const cx = left ? 0 : (g.width - cw);
+        gctx.fillStyle = t.bg; gctx.beginPath();
+        gctx.roundRect(cx, ty - h / 2, cw, h, left ? [0, r, r, 0] : [r, 0, 0, r]);   // round the chart-facing corners
+        gctx.fill();
+        gctx.fillStyle = t.fg; gctx.textAlign = 'left'; gctx.textBaseline = 'middle';
+        gctx.fillText(t.chip, cx + 6, ty);
+      }
+    }
+  }
+  // 1-D label declutter: sort by desired y, push boxes (height h) apart so none overlap, then
+  // clamp into [h/2, maxY - h/2]. A handful of labels, so two passes are plenty.
+  _stackTags(tags, h, maxY) {
+    if (tags.length < 2) return;
+    tags.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < tags.length; i++) if (tags[i].y - tags[i - 1].y < h) tags[i].y = tags[i - 1].y + h;
+    const bot = (maxY || Infinity) - h / 2;
+    for (let i = tags.length - 1; i >= 0; i--) {
+      if (tags[i].y > bot) tags[i].y = bot;
+      if (i > 0 && tags[i].y - tags[i - 1].y < h) tags[i - 1].y = tags[i].y - h;
+    }
+    for (let i = 0; i < tags.length; i++) if (tags[i].y < h / 2) tags[i].y = h / 2;
   }
   // primitive timeAxisViews -> tags on the shared botbar (drawn after bb.update)
   _drawTimeAxisViews() {
@@ -705,7 +748,10 @@ class Chart {
     for (const pane of this._panes) {
       p.shaders = this._gridShaders; pane.grid.update();
       if (this._showPrice) {   // skip the price axis entirely when hidden (its space is already reclaimed)
-        p.shaders = (pane.k === 0 && this._lastValueVisible) ? this._sbShaders : this._noShaders; pane.sb.update();
+        // The author's last-price label is its own sidebar shader; we draw the SAME label in
+        // _drawAxisViews so every label lives in one system (and can be decluttered). So never
+        // apply the sidebar shader here — _drawAxisViews owns all price-axis labels.
+        p.shaders = this._noShaders; pane.sb.update();
         this._drawAxisViews(pane);
       }
     }

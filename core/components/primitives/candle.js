@@ -29,9 +29,19 @@ export default class CandleExt {
         this.ctx.strokeStyle = wick_color
 
         this.ctx.beginPath()
-        this.ctx.moveTo(x05, Math.floor(data.h))
-        this.ctx.lineTo(x05, Math.floor(data.l))
-
+        if (data.w > 1.5) {
+            // draw the wick in TWO segments so it never pierces the body (matches
+            // TradingView): high -> top of body, and bottom of body -> low. This stays
+            // correct for hollow / transparent bodies, where a full-length wick behind
+            // the body would otherwise show straight through it.
+            const bodyTop = Math.floor(Math.min(data.o, data.c))
+            const bodyBot = Math.floor(Math.max(data.o, data.c))
+            this.ctx.moveTo(x05, Math.floor(data.h)); this.ctx.lineTo(x05, bodyTop)
+            this.ctx.moveTo(x05, bodyBot); this.ctx.lineTo(x05, Math.floor(data.l))
+        } else {
+            this.ctx.moveTo(x05, Math.floor(data.h))
+            this.ctx.lineTo(x05, Math.floor(data.l))
+        }
         this.ctx.stroke()
 
         if (data.w > 1.5) {
