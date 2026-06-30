@@ -44,8 +44,8 @@ call `t2screen` / `$2screen` directly — so the mapping environment is fully pr
 Internally a chart is **one declarative object** — price plus every indicator and which
 pane it lives in (this is also the shape the original library accepts as input). A data
 point is a **positional array** `[timestamp, ...values]` (timestamp in milliseconds),
-and the engine works in **bar-index space** (time is a lookup for axis labels, not the
-primary key), so missing bars collapse instead of leaving whitespace.
+and the engine addresses bars by **position** — the array index — with time looked up
+only for axis labels, never as the bar's identity.
 
 ```js
 {
@@ -63,34 +63,35 @@ functions (see [Quick start](#quick-start)) that build it for you.
 Both draw candles to a canvas, but they map data in fundamentally different ways.
 
 **Lightweight Charts — time-keyed, object-per-point, one series per plot.**
-You imperatively create a series object for each plot and feed it objects keyed by
-`time`. The x-axis is a **time scale** that reasons about the calendar — sessions,
-gaps, whitespace — because *time* is the primary key.
+You imperatively create a series object for each plot and feed it objects whose key is
+`time`: a bar's identity *is* its timestamp (unique, ascending). The time scale knows
+each bar's time — for axis labels, the crosshair, and business-day handling.
 
 ```js
 const s = chart.addCandlestickSeries();
 s.setData([{ time: 1551128400, open: 33, high: 37.1, low: 14, close: 14 }, ...]);
 ```
 
-**This engine** inverts every one of those choices (see [The data model](#the-data-model)
-above): one declarative tree of positional arrays, addressed by **bar index** — so gaps
-collapse on their own and there is no whitespace concept.
+**This engine** inverts those choices (see [The data model](#the-data-model) above): one
+declarative tree of positional arrays, where a bar's identity is its **position** (the
+array index), not its time.
 
 |                  | Lightweight Charts        | this engine                       |
 | ---------------- | ------------------------- | --------------------------------- |
 | Unit of data     | a series object per plot  | one declarative chart tree        |
 | A point is       | an object `{time, value}` | a positional array `[t, ...vals]` |
-| X-axis key       | **time** (calendar scale) | **bar index** (time is looked up) |
-| Missing bars     | gaps / whitespace         | collapsed automatically           |
+| A bar's identity | its **timestamp**         | its **position** (array index)    |
 | Indicators       | each is its own series API | just more `data` arrays           |
 | What you render   | a fixed set of series types | anything expressible as data, via the transforms |
 
-The deepest difference follows from the philosophy above: Lightweight Charts is a
-**closed catalog of series types you feed**; this is an **open mapping environment** in
-which the built-in plots have no special status over what you draw. Neither is
-"correct" — LWC's calendar time scale is the better fit when you need real session gaps
-— but conceptually this engine treats a chart as what it is: an ordered sequence of
-bars addressed by position, drawn through data->screen transforms.
+Both, by the way, space bars **evenly by position** and stay tidy — neither leaves
+proportional gaps for missing time by default. The difference isn't how the chart
+*looks*; it's the model underneath. The deepest part follows from the philosophy above:
+Lightweight Charts is a **closed catalog of series types you feed**; this is an **open
+mapping environment** in which the built-in plots have no special status over what you
+draw. Neither is "correct" — LWC's time-keyed identity gives it built-in business-day
+handling and a mature ecosystem; this engine's positional model makes a chart a plain
+ordered sequence addressed by index, drawn through data->screen transforms.
 
 ## Declared, not drawn
 
