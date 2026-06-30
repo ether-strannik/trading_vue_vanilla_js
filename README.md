@@ -92,6 +92,53 @@ which the built-in plots have no special status over what you draw. Neither is
 — but conceptually this engine treats a chart as what it is: an ordered sequence of
 bars addressed by position, drawn through data->screen transforms.
 
+## Declared, not drawn
+
+This is the difference that matters, and most people never see it — for many a chart is
+just lines on a screen. But there are dozens of price-rendering engines, and only a few
+stand out, because of *what they are*. Most are **canvases you plot dots on**: you
+compute positions and issue draw commands. A few are **environments you feed datasets
+to**. This is one of the latter, and it's the whole reason the engine was worth
+preserving.
+
+Both kinds end in pixels on a canvas. So the difference is not *drawing vs not-drawing* —
+it's **who holds the model, and how the picture comes to exist**:
+
+- **Imperative (Lightweight Charts): you are the draftsman.** You create a series, mutate
+  it, push points, issue commands. The chart is the running total of your operations.
+- **Declarative (this engine): you state what is.** You hand over one value — the data
+  tree — and the engine **reconciles the screen to match it**. You describe the end
+  state; the system makes reality agree. It is **React, but for a chart**: you declare
+  what exists, and the environment brings it into being.
+
+### The components are deliberately dumb
+
+A plot here knows exactly one thing. RSI does not know geometry — it cannot measure the
+distance from A to B, or reason about the chart. It knows only: *given my value at this
+index, here is my shape.* The candle is the same: *given OHLC at this index, here is my
+body and wicks.* Each plot is a pure function of **its own datum**, nothing more.
+
+And nothing on the chart computes *meaning*. `RSI = 56.6` is not calculated by the
+renderer — it arrives as data (the indicator math lives upstream, outside this engine).
+The render system never asks "what is RSI"; it asks only "where does 56.6 go." No
+semantic calculation happens at the plot — only data -> screen mapping.
+
+### The environment is already there
+
+What pre-exists isn't the candle — it's the **environment**: the coordinate space, the
+scales, the viewport, the `t2screen` / `$2screen` transforms. The empty market space,
+standing ready. Data doesn't *draw into* it; data **populates** it, and the dumb
+primitives read the mapping and resolve themselves into pixels.
+
+So feeding the engine isn't plotting a candle. It's closer to:
+
+> "Hey, candle at `1551128400000` — you'll be here, and you'll be this big."
+> The candle says "okay," and materializes.
+
+The candle was already there in a dormant state, as funny as that sounds; the data
+inhales life into it. The market environment doesn't need to be drawn — it exists in its
+primordial form, and you feed it the dataset that brings each object to life.
+
 ## Quick start
 
 > Note: the public function names below (`createChart`, `addSeries`, `setData`) are
