@@ -27,6 +27,12 @@ export const LineSeries = { type: 'Line' };
 export const AreaSeries = { type: 'Area' };
 export const BaselineSeries = { type: 'Baseline' };
 export const HistogramSeries = { type: 'Histogram' };
+// A partitionable bar. Each data point: { time, segments:[{from,to,color}], lines?:[{level,color,
+// width?,lineStyle?}], wick?:{from,to,color?,width?}, value? }. Segments are filled regions of the
+// bar (stacked partitions); lines are bar-WIDTH horizontal delineations sharing the bar's exact
+// geometry (no glyph drift); wick is a thin centered vertical stem. The matplotlib/pandas bar
+// vocabulary: stacked bars, up/down volume with a delta line, candle-like wicked bars, error bars.
+export const SegmentedSeries = { type: 'Segmented' };
 
 const DEFAULT_FONT = '11px -apple-system, BlinkMacSystemFont, Arial, sans-serif';
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
@@ -54,6 +60,34 @@ const TRANSPARENT = 'rgba(0,0,0,0)';
 function dashFor(style) {
   switch (style) { case 1: return [1, 2]; case 2: return [5, 2]; case 3: return [8, 5]; case 4: return [1, 4]; default: return []; }
 }
+// one bar-marker glyph at screen (x,y). shape: 'tick' (short horizontal dash, scaled to bar
+// width — TV's volume "-"), 'text' (m.text), 'circle', 'square', 'arrowUp', 'arrowDown'.
+function drawMarkerGlyph(ctx, x, y, bw, m, font) {
+  const color = m.color || '#b2b5be';
+  const shape = m.shape || (m.text != null ? 'text' : 'tick');
+  ctx.fillStyle = color; ctx.strokeStyle = color;
+  if (shape === 'text') {
+    ctx.font = m.fontSize ? (m.fontSize + 'px sans-serif') : (font || '11px sans-serif');
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(m.text == null ? '' : m.text), x, y);
+    return;
+  }
+  const size = m.size != null ? m.size : 10;
+  if (shape === 'tick') {
+    // span the full bar width (bw is already the bar body width), thin + pixel-crisp
+    const w = Math.max(3, bw), xc = Math.round(x), yy = Math.round(y) + 0.5;
+    ctx.lineWidth = m.lineWidth || 1;
+    ctx.beginPath(); ctx.moveTo(xc - w / 2, yy); ctx.lineTo(xc + w / 2, yy); ctx.stroke();
+  } else if (shape === 'circle') {
+    ctx.beginPath(); ctx.arc(x, y, size / 2, 0, Math.PI * 2); ctx.fill();
+  } else if (shape === 'square') {
+    ctx.fillRect(x - size / 2, y - size / 2, size, size);
+  } else if (shape === 'arrowUp') {
+    ctx.beginPath(); ctx.moveTo(x, y - size / 2); ctx.lineTo(x - size / 2, y + size / 2); ctx.lineTo(x + size / 2, y + size / 2); ctx.closePath(); ctx.fill();
+  } else if (shape === 'arrowDown') {
+    ctx.beginPath(); ctx.moveTo(x, y + size / 2); ctx.lineTo(x - size / 2, y - size / 2); ctx.lineTo(x + size / 2, y - size / 2); ctx.closePath(); ctx.fill();
+  }
+}
 function candleStyle(o = {}) {
   // borderVisible / wickVisible are LWC booleans the app toggles. Honor them: border -> null
   // (the primitive skips a null border); wick -> transparent (the primitive always strokes the wick).
@@ -77,12 +111,24 @@ class Series {
     this._rows = [];
     this._primitives = [];   // ISeriesPrimitive hosts (drawings/tools/alerts/study-shapes)
     this._priceLines = [];
+    this._markers = [];      // glyphs drawn on the bars (setMarkers) — ticks/text/shapes
   }
   _isCandle() { return this._type.type === 'Candlestick'; }
   // candlestick -> [t,o,h,l,c,v]; value series (line/area/baseline/histogram) -> [t, value]
   _row(b) {
     const t = Math.round(b.time * 1000);
     if (b.open != null || b.high != null || b.close != null) return [t, b.open, b.high, b.low, b.close, b.volume || 0];
+    // segmented bar: store [t, lo, hi, payload]. lo/hi span every segment/line/wick value so the
+    // pane auto-scales to the whole bar (grid_maker scans the numeric columns; payload is ignored).
+    if (b.segments || b.wick || b.lines) {
+      let lo = Infinity, hi = -Infinity;
+      const ext = (v) => { if (v != null && isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } };
+      (b.segments || []).forEach((s) => { ext(s.from); ext(s.to); });
+      (b.lines || []).forEach((l) => ext(l.level));
+      if (b.wick) { ext(b.wick.from); ext(b.wick.to); }
+      if (lo === Infinity) { lo = 0; hi = 0; }
+      return [t, lo, hi, b];
+    }
     return b.color != null ? [t, b.value, b.color] : [t, b.value];   // per-point color (histogram/line)
   }
   setData(bars) {
@@ -131,6 +177,13 @@ class Series {
     this._priceLines.push(line); this._chart._schedule(); return line;
   }
   removePriceLine(line) { const i = this._priceLines.indexOf(line); if (i >= 0) this._priceLines.splice(i, 1); this._chart._schedule(); }
+  // Glyphs on the bars (LWC setMarkers). Each marker:
+  //   { time, price?, position?, shape?, text?, color?, size?, lineWidth?, fontSize? }
+  // price = exact level; else position ('aboveBar'|'belowBar'|'inBar') relative to this series'
+  // value at that time. shape: 'tick'|'text'|'circle'|'square'|'arrowUp'|'arrowDown' (default
+  // 'text' if text is set, else 'tick'). A 'tick' is the short horizontal dash (TV's volume "-").
+  setMarkers(markers) { this._markers = Array.isArray(markers) ? markers : []; this._chart._invalidate(); return this; }
+  markers() { return this._markers; }
   // ISeriesPrimitive host: the Engine runs prim.paneViews().renderer().draw(target) each frame
   attachPrimitive(prim) {
     if (this._primitives.indexOf(prim) >= 0) return;
@@ -172,6 +225,8 @@ class Chart {
     this._ocs = [];               // offchart descriptors [{ paneIndex, series:[...] }] ordered -> grids[1..N]
     this._logScale = false;       // main price scale (mode 1 = log) — set by _readScaleOpts
     this._paneLog = {};           // offchart pane index -> logScale bool
+    this._scaleProviders = {};    // pane ID -> y_range fn (hi,lo)=>[hi,lo]: shapes a pane's AUTO-fit
+                                   // range (the author's overlay y_range hook). Manual drag overrides it.
     this._invert = false;         // invertScale (flip Y)
     this._scaleSide = 'right';    // price axis side ('right' | 'left')
     this._showPrice = true; this._showTime = true;   // price-scale / time-scale visibility
@@ -316,6 +371,10 @@ class Chart {
     // ID; a hidden pane (not in _paneIds) is skipped — its window restores when it reappears.
     const yTransforms = {};
     for (const k in this._y) { const y = this._y[k]; if (!y.auto && y.range) { const pos = this._paneIds.indexOf(+k); if (pos >= 0) yTransforms[pos] = { auto: false, range: y.range }; } }
+    // per-pane auto-range shapers (study `scale`): keyed by grid POSITION, as one layer carrying a
+    // y_range fn — grid_maker applies the first y_range it finds (only in auto mode).
+    const layersMeta = {};
+    for (const k in this._scaleProviders) { const fn = this._scaleProviders[k]; if (typeof fn === 'function') { const pos = this._paneIds.indexOf(+k); if (pos >= 0) layersMeta[pos] = { scale: { y_range: fn } }; } }
     const offcharts = this._ocs.map((o) => {
       const id = o.paneIndex;   // pane ID (keys per-pane state, survives reorder/hide)
       const s0 = o.series[0];   // candle pane: drop volume so the y-range scan = [high, low], not volume
@@ -324,7 +383,7 @@ class Chart {
     });
     const { layout, sub, interval } = buildLayout({
       rows: cs._rows, range: this._range, width: this._w, height: this._h,
-      colors, font: this._font(), timezone: this._comp.$props.timezone, yTransforms, offcharts, logScale: this._logScale, ib: this._ib, mainGridHeight: this._stretch[0],
+      colors, font: this._font(), timezone: this._comp.$props.timezone, yTransforms, layersMeta, offcharts, logScale: this._logScale, ib: this._ib, mainGridHeight: this._stretch[0],
       hidePrice: !this._showPrice, hideTime: !this._showTime,   // reclaim freed space when a scale is hidden
       candleWidth: this._candleWidth(),   // user-set candle body width (fraction of bar step)
     });
@@ -365,6 +424,7 @@ class Chart {
       const overlays = [];
       if (pane.k === 0) overlays.push({ z: 0, display: true, renderer: { draw: (ctx) => this._drawCandles(ctx) } });
       for (const s of pane.series) overlays.push({ z: 10, display: true, renderer: { draw: (ctx) => this._drawSeries(ctx, pane.k, s) } });
+      overlays.push({ z: 20, display: true, renderer: { draw: (ctx) => this._drawMarkers(ctx, pane.k, pane.series) } });
       overlays.push({ z: 1e5, display: true, renderer: { draw: (ctx) => this._drawPriceLines(ctx, pane.k) } });
       overlays.push({ z: 1e6, display: true, renderer: { draw: (ctx) => this._drawPrimitives(ctx, pane) } });
       pane.grid.overlays = overlays;
@@ -481,6 +541,7 @@ class Chart {
       case 'Area': return this._drawArea(ctx, g, s);
       case 'Baseline': return this._drawBaseline(ctx, g, s);
       case 'Histogram': return this._drawHistogram(ctx, g, s);
+      case 'Segmented': return this._drawSegmented(ctx, g, s);
       default: return this._drawLineSeries(ctx, g, s);   // Line
     }
   }
@@ -491,7 +552,8 @@ class Chart {
   _drawLineSeries(ctx, g, s) {
     const o = s._opts;
     ctx.beginPath(); this._polyline(ctx, g, s._rows);
-    ctx.lineWidth = o.lineWidth || 1.5; ctx.strokeStyle = o.color || o.lineColor || '#4d88ff'; ctx.stroke();
+    ctx.lineWidth = o.lineWidth || 1.5; ctx.strokeStyle = o.color || o.lineColor || '#4d88ff';
+    ctx.setLineDash(dashFor(o.lineStyle || 0)); ctx.stroke(); ctx.setLineDash([]);   // honor solid/dotted/dashed
   }
   _drawArea(ctx, g, s) {
     const o = s._opts, rows = s._rows, base = g.height;
@@ -504,7 +566,8 @@ class Chart {
     if (ctx.createLinearGradient) { const gr = ctx.createLinearGradient(0, 0, 0, base); gr.addColorStop(0, top); gr.addColorStop(1, bot); fill = gr; }
     ctx.fillStyle = fill; ctx.fill();
     ctx.beginPath(); this._polyline(ctx, g, rows);
-    ctx.lineWidth = o.lineWidth || 2; ctx.strokeStyle = line; ctx.stroke();
+    ctx.lineWidth = o.lineWidth || 2; ctx.strokeStyle = line;
+    ctx.setLineDash(dashFor(o.lineStyle || 0)); ctx.stroke(); ctx.setLineDash([]);
   }
   _drawBaseline(ctx, g, s) {
     const o = s._opts, rows = s._rows;
@@ -538,6 +601,78 @@ class Chart {
     if (rows.length > 1) bw = Math.max(1, Math.abs(g.t2screen(rows[1][0]) - g.t2screen(rows[0][0])) * 0.7);
     const dft = o.color || '#4d88ff';
     for (const r of rows) { const x = g.t2screen(r[0]), y = g.$2screen(r[1]); ctx.fillStyle = r[2] || dft; ctx.fillRect(Math.floor(x - bw / 2), yBase, Math.max(1, Math.floor(bw)), y - yBase); }
+  }
+  // segmented bar: filled partitions + bar-width delineation lines + a thin centered wick, all
+  // sharing the bar's exact geometry (so a delineation can never drift off the bar edges).
+  _drawSegmented(ctx, g, s) {
+    const rows = s._rows; if (!rows.length) return;
+    let bw = 8;
+    if (rows.length > 1) bw = Math.max(1, Math.abs(g.t2screen(rows[1][0]) - g.t2screen(rows[0][0])) * 0.7);
+    // width factor f (0..1 of the bar) -> [left, pixelWidth], centered at x. Lets layers stack:
+    // wide volume boxes in back, a narrow delta candle/line in front, all zero-anchored.
+    const span = (x, f) => { const w = Math.max(1, Math.floor(bw * (f != null ? f : 1))); return [Math.floor(x - w / 2), w]; };
+    for (const r of rows) {
+      const p = r[3]; if (!p) continue;
+      const x = g.t2screen(r[0]);
+      // filled partitions (each can be narrower than the bar via seg.width -> layering)
+      for (const seg of (p.segments || [])) {
+        if (seg.from == null || seg.to == null) continue;
+        const [left, w] = span(x, seg.width);
+        const y1 = g.$2screen(seg.from), y2 = g.$2screen(seg.to);
+        ctx.fillStyle = seg.color || '#888'; ctx.fillRect(left, Math.min(y1, y2), w, Math.max(1, Math.abs(y2 - y1)));
+      }
+      // whiskers / stems: an array (p.wicks) or the legacy single p.wick; thin centered verticals,
+      // so a slot can carry an up-whisker AND a down-whisker.
+      const wicks = p.wicks || (p.wick ? [p.wick] : []);
+      for (const wk of wicks) {
+        if (wk.from == null || wk.to == null) continue;
+        const xc = Math.round(x) + 0.5;
+        ctx.strokeStyle = wk.color || '#888'; ctx.lineWidth = wk.width || 1;
+        ctx.beginPath(); ctx.moveTo(xc, g.$2screen(wk.from)); ctx.lineTo(xc, g.$2screen(wk.to)); ctx.stroke();
+      }
+      // delineations (delta / median); ln.span (0..1) narrows the line to a layer's width
+      for (const ln of (p.lines || [])) {
+        if (ln.level == null) continue;
+        const [left, w] = span(x, ln.span);
+        const yy = Math.round(g.$2screen(ln.level)) + 0.5;
+        ctx.strokeStyle = ln.color || '#000'; ctx.lineWidth = ln.width || 1;
+        ctx.setLineDash(dashFor(ln.lineStyle || 0));
+        ctx.beginPath(); ctx.moveTo(left, yy); ctx.lineTo(left + w, yy); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  }
+  // glyphs on bars (setMarkers): for each visible series in the pane, draw its markers. price =
+  // exact level; otherwise the marker sits relative to the series' value at that time.
+  _drawMarkers(ctx, k, series) {
+    const g = this._gridAt(k); if (!g) return;
+    const font = this._comp.$props.font;
+    for (const s of series) {
+      const ms = s._markers; if (!ms || !ms.length || s._opts.visible === false) continue;
+      const rows = s._rows;
+      let bw = 8;
+      if (rows.length > 1) bw = Math.max(2, Math.abs(g.t2screen(rows[1][0]) - g.t2screen(rows[0][0])) * 0.7);
+      const valAt = (tms) => {
+        const d = rows; if (!d.length) return null;
+        let lo = 0, hi = d.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (d[m][0] < tms) lo = m + 1; else hi = m; }
+        let i = lo; if (i > 0 && Math.abs(d[i - 1][0] - tms) <= Math.abs(d[i][0] - tms)) i = i - 1;
+        return d[i];
+      };
+      ctx.save();
+      for (const m of ms) {
+        const tms = Math.round(m.time * 1000);
+        const x = g.t2screen(tms);
+        let y;
+        if (m.price != null) { y = g.$2screen(m.price); }
+        else {
+          const r = valAt(tms); y = g.$2screen(r ? r[1] : 0);
+          const off = (m.size != null ? m.size : 10) + 4;
+          if (m.position === 'aboveBar') y -= off; else if (m.position === 'belowBar') y += off;
+        }
+        drawMarkerGlyph(ctx, x, y, bw, m, font);
+      }
+      ctx.restore();
+    }
   }
   // candle series in an offchart pane (e.g. a compare instrument): coords from the pane's grid + the author's Candle
   _drawCandleSeries(ctx, g, s) {
@@ -789,7 +924,8 @@ class Chart {
       let lo = 0, hi = d.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (d[m][0] < tms) lo = m + 1; else hi = m; }
       let i = lo; if (i > 0 && Math.abs(d[i - 1][0] - tms) <= Math.abs(d[i][0] - tms)) i = i - 1;
       const r = d[i];
-      map.set(s, s._isCandle() ? { time: r[0] / 1000, open: r[1], high: r[2], low: r[3], close: r[4], value: r[4] } : { time: r[0] / 1000, value: r[1] });
+      const seg = (s._type.type === 'Segmented') && r[3];   // segmented value = payload.value (else its lo)
+      map.set(s, s._isCandle() ? { time: r[0] / 1000, open: r[1], high: r[2], low: r[3], close: r[4], value: r[4] } : { time: r[0] / 1000, value: seg && seg.value != null ? seg.value : r[1] });
     }
     return map;
   }
@@ -971,6 +1107,11 @@ class Chart {
   // ---- ENGINE_API.md surface ----
   addSeries(type, opts = {}, paneIndex = 0) { const s = new Series(this, type, opts, paneIndex); this._series.push(s); this._invalidate(); return s; }
   removeSeries(s) { const i = this._series.indexOf(s); if (i >= 0) this._series.splice(i, 1); this._invalidate(); }
+  // Shape a pane's AUTO-fit price range (the engine author's overlay y_range hook). fn is
+  // (hi, lo) => [hi, lo, exp?]: given the data-driven high/low, return the range to use (and an
+  // optional expansion factor). Pass null to clear. Ignored while the user has manually zoomed
+  // that pane's scale (manual drag wins). paneId = the paneIndex the series was added with.
+  setPaneScale(paneId, fn) { if (fn) this._scaleProviders[paneId] = fn; else delete this._scaleProviders[paneId]; this._invalidate(); }
   applyOptions(o = {}) {
     this._options = deepMerge(this._options, o);
     const prevSide = this._scaleSide;
@@ -1111,4 +1252,4 @@ class Chart {
 }
 
 export function createChart(el, options) { return new Chart(el, options); }
-export default { createChart, CrosshairMode, LineStyle, CandlestickSeries, LineSeries, AreaSeries, BaselineSeries, HistogramSeries };
+export default { createChart, CrosshairMode, LineStyle, CandlestickSeries, LineSeries, AreaSeries, BaselineSeries, HistogramSeries, SegmentedSeries };

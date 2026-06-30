@@ -15,7 +15,7 @@ const DEFAULT_FONT = '11px -apple-system, BlinkMacSystemFont, Arial, sans-serif'
 // offcharts: [{ rows:[[t_ms, v, ...]], grid:{height?,logScale?} }] -> stacked offchart panes (grids[1..N])
 // ib: index-based mode (non-linear time axis — collapses weekend/overnight gaps). range is in
 // INDEX units; the layout consumes the index-mapped sub (ti_map.sub_i).
-export function buildLayout({ rows, range, width, height, colors, font, timezone, yTransforms, offcharts, logScale, ib, mainGridHeight, hidePrice, hideTime, candleWidth }) {
+export function buildLayout({ rows, range, width, height, colors, font, timezone, yTransforms, layersMeta, offcharts, logScale, ib, mainGridHeight, hidePrice, hideTime, candleWidth }) {
   // hidden scales reclaim their space: force sidebar width -> 0 (SBMIN/SBMAX=0) and/or botbar -> 0.
   // candleWidth overrides CANDLEW (candle body width vs bar step). Copy ChartConfig so we never
   // mutate the shared Const.ChartConfig.
@@ -69,7 +69,7 @@ export function buildLayout({ rows, range, width, height, colors, font, timezone
     interval: ib ? 1 : interval, interval_ms: interval,
     range,
     ctx: Context($props),            // headless canvas ctx for text measurement (sidebar width)
-    layers_meta: {},
+    layers_meta: layersMeta || {},   // per-grid-position { layerId: { y_range } } — shapes auto-fit
     ti_map,
     y_transforms: yTransforms || {},   // per-grid Y zoom/shift (absent = auto-fit)
     meta: { sub_start },
